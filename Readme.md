@@ -138,6 +138,7 @@ and some basic information about their usage and options.
             apt: asserts packages installed via apt-get on Debian or Ubuntu Linux
             apk: asserts packages installed via apk (Alpine Linux)
             yum: asserts packages installed via yum on CentOS or RedHat Linux
+         zypper: asserts packages installed via zypper (SUSE)
 ```
 
 ### User management (currently Linux-only)
