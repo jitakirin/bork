@@ -11,6 +11,12 @@ else
   global=$(arguments get global $*)
 fi
 
+bootstrap=false
+if [[ -z ${name} ]]; then
+  bootstrap=true
+  name='pipsi'
+fi
+
 # set paths, try variables pipsi itself uses first and fall-back to
 # defaults; take the 'global' option into account
 declare -a pipsi_opts=( )
@@ -21,6 +27,7 @@ if [[ ${global} == true ]]; then
   pipsi_home="${PIPSI_GLOBAL_HOME:-"/usr/local/lib/pipsi"}"
   pipsi_opts+=( --bin-dir=${pipsi_bin_dir} --home=${pipsi_home} )
 fi
+pip="${pipsi_home}/${name}/bin/pip"
 
 # if bin_dir or home are not writable, automatically attempt to elevate
 # permissions using sudo
@@ -56,15 +63,14 @@ case "${action}" in
   status)
     needs_exec "python3" || return "${STATUS_FAILED_PRECONDITION}"
 
-    if [[ -z ${name} ]]; then  # operate on pipsi itself
+    if ${bootstrap}; then  # operate on pipsi itself
       status_have_pipsi || {
         status="$?"
         needs_exec "curl" || return "${STATUS_FAILED_PRECONDITION}"
+        needs_exec "git" || return "${STATUS_FAILED_PRECONDITION}"
         return "${status}"
       }
-      # we got here so pipsi is available, check if up-to-date same as
-      # a regular packge
-      name="pipsi"
+      # pipsi is available, fall back to common check for up-to-date
     else  # operate on provided packge
       bake which pipsi || return "${STATUS_FAILED_PRECONDITION}"
 
@@ -74,30 +80,29 @@ case "${action}" in
     fi
 
     # pipsi doesn't provide a way to check if packge is up-to-date,
-    # so for now have to use `pip` directly, which also means we need
-    # to know location of pipsi virtualenvs
-    pip="${pipsi_home}/${name}/bin/pip"
+    # so for now have to use `pip` directly
     ! bake "${pip}" list --outdated --format=legacy | egrep "^${name} " \
       || return "${STATUS_OUTDATED}"
     return "${STATUS_OK}"
     ;;
   install)
     su="$(get_su)"
-    if [[ -z ${name} ]]; then  # operate on pipsi itself
+    if ${bootstrap}; then  # operate on pipsi itself
       # escape the pipe as we want `bake` to evaluate it lazily
+      # install pipsi from git master for now as release on pypi is
+      # ancient, master contains many fixes and some new features
       bake curl -fsSL \
         https://raw.githubusercontent.com/mitsuhiko/pipsi/master/get-pipsi.py \
-        \| "${su}" python3 - "${pipsi_opts[@]}"
+        \| "${su}" python3 - "${pipsi_opts[@]}" \
+        --src 'git+https://github.com/mitsuhiko/pipsi.git#egg=pipsi'
     else  # operate on provided packge
       bake "${su}" pipsi "${pipsi_opts[@]}" install "${name}"
     fi
+    bake "${pip}" install --upgrade pip setuptools
     ;;
   upgrade|delete)
     if [[ ${action} == delete ]]; then
       action="uninstall"
-    fi
-    if [[ -z ${name} ]]; then
-      name="pipsi"
     fi
     bake "$(get_su)" pipsi "${pipsi_opts[@]}" "${action}" "${name}"
     ;;
